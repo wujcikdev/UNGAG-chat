@@ -30,6 +30,7 @@ const {
   seedTurnConversation,
   needsRetentionConversation,
   getConversationWriteContext,
+  resolvePersistedReasoningOverride,
 } = require('@librechat/api');
 const {
   Constants,
@@ -47,7 +48,6 @@ const {
   stripReasoningLabelMetadata,
   resolveTurnLLMDeliveryPath,
   resolveUseResponsesApi,
-  reasoningOverrideSchema,
 } = require('librechat-data-provider');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { logViolation } = require('~/cache');
@@ -608,12 +608,15 @@ class BaseClient {
       if (referencedQuotes != null) {
         userMessage.quotes = referencedQuotes;
       }
-      const reasoningOverride = reasoningOverrideSchema.safeParse(
-        this.options.req?.body?.reasoningOverride,
-      );
-      if (reasoningOverride.success) {
-        userMessage.reasoningOverride = reasoningOverride.data;
-      }
+    }
+
+    const persistedReasoningOverride = resolvePersistedReasoningOverride({
+      rawReasoningOverride: this.options.req?.body?.reasoningOverride,
+      isEdited: opts.isEdited,
+      isCompaction: opts.isCompaction,
+    });
+    if (persistedReasoningOverride !== undefined) {
+      userMessage.reasoningOverride = persistedReasoningOverride;
     }
 
     if (typeof opts?.getReqData === 'function') {
