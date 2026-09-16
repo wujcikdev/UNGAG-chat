@@ -6,6 +6,7 @@ const {
   ErrorTypes,
   ViolationTypes,
   isEphemeralAgentId,
+  reasoningOverrideSchema,
 } = require('librechat-data-provider');
 const {
   toPendingSteer,
@@ -236,7 +237,16 @@ function resolvePreallocatedUserMessageId({
 }
 
 function getPreliminaryUserMessage(
-  { messageId, parentMessageId, text, quotes, files, manualSkills, alwaysAppliedSkills },
+  {
+    messageId,
+    parentMessageId,
+    text,
+    quotes,
+    files,
+    manualSkills,
+    alwaysAppliedSkills,
+    reasoningOverride,
+  },
   conversationId,
   subagentTriggerProjection,
 ) {
@@ -251,6 +261,7 @@ function getPreliminaryUserMessage(
    * turn keeps its `MessageQuotes`.
    */
   const referencedQuotes = getReferencedQuotes(quotes);
+  const parsedReasoningOverride = reasoningOverrideSchema.safeParse(reasoningOverride);
 
   return {
     messageId,
@@ -269,6 +280,9 @@ function getPreliminaryUserMessage(
     ...(Array.isArray(manualSkills) && manualSkills.length > 0 && { manualSkills }),
     ...(Array.isArray(alwaysAppliedSkills) &&
       alwaysAppliedSkills.length > 0 && { alwaysAppliedSkills }),
+    ...(parsedReasoningOverride.success && {
+      reasoningOverride: parsedReasoningOverride.data,
+    }),
     ...(subagentTriggerProjection != null && { subagentTriggerProjection }),
   };
 }
@@ -2303,6 +2317,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
                 conversationId: userMsg.conversationId,
                 text: userMsg.text,
                 quotes: userMsg.quotes,
+                reasoningOverride: userMsg.reasoningOverride,
                 // Persist the turn's uploaded files here (authoritative job metadata) so a
                 // HITL resume sources them from the job, not the user DB row — which the
                 // approval prompt can race (the row save may still be in flight when a fast
