@@ -629,6 +629,8 @@ export type TCodeEnvironmentMoveResponse = {
 };
 
 export type TConfig = {
+  /** Encoding of the saved Key value, declared by the endpoint owner. */
+  keyEncoding?: 'apiKey' | 'google' | 'azure' | 'bedrock';
   order: number;
   type?: EModelEndpoint;
   azure?: boolean;
@@ -803,7 +805,7 @@ export type TRefreshTokenResponse = {
 };
 
 export type TCheckUserKeyResponse = {
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 export type TRequestPasswordResetResponse = {
@@ -975,6 +977,10 @@ export type TUpdateFeedbackResponse = {
 
 export type TBalanceResponse = {
   tokenCredits: number;
+  reservedCredits?: number;
+  mediaDebtCredits?: number;
+  availableCredits?: number;
+  mediaHeldCredits?: number;
   // Automatic refill settings
   autoRefillEnabled: boolean;
   refillIntervalValue?: number;

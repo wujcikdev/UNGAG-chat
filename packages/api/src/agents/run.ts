@@ -60,6 +60,7 @@ import type { LangfuseTraceContext } from '~/langfuse/identity';
 import type { ResolvedAlwaysApplySkill } from '~/agents/skills';
 import type { CodeExecutionContext } from '~/agents/execution';
 import type { MCPToolAlias } from '~/tools/classification';
+import type { NativeMediaFactory } from '~/media/native';
 import type { SubagentUsageEvent } from '~/agents/usage';
 import type { RunFileSession } from './files/session';
 import type { RunFadingTiers } from './fading';
@@ -118,12 +119,14 @@ import { getBuiltInBaseURL } from '~/endpoints/openai/initialize';
 import { getProviderConfig } from '~/endpoints/config/providers';
 import { buildToolApprovalHooks } from '~/agents/hitl/hooks';
 import { getAgentCheckpointer } from '~/agents/checkpointer';
+import { createDeferredNativeMediaPort } from '~/media/sdk';
 import { getPluginHookSource } from '~/agents/hooks/source';
 import { getOpenAIConfig } from '~/endpoints/openai/config';
 import { createStepBudgetHook } from '~/agents/stepBudget';
 import { buildHITLRunWiring } from '~/agents/hitl/runtime';
 import { buildLangfuseConfig } from '~/langfuse/config';
 import { applyTestRunHook } from '~/agents/testHook';
+import { resolveUsageType } from '~/agents/usage';
 import { isUserProvided } from '~/utils/common';
 import { createSafeUser } from '~/utils/env';
 
@@ -2096,6 +2099,7 @@ export async function createRun({
   subagentUsageSink,
   subagentTasks,
   runFiles,
+  nativeMediaFactory,
   steering,
   activityLabel,
   activityPhase,
@@ -2113,6 +2117,7 @@ export async function createRun({
   /** Conversation-stable identity, used by the e2e run hook to tell a resumed
    *  run apart from a fresh attempt (a resume carries no messages). */
   conversationId?: string;
+  nativeMediaFactory?: NativeMediaFactory;
   streaming?: boolean;
   streamUsage?: boolean;
   requestBody?: t.RequestBody;
@@ -2382,6 +2387,37 @@ export async function createRun({
       ) as t.RunLLMConfig,
       modelCallbacks,
     );
+
+    if (nativeMediaFactory && String(provider).toLowerCase() === 'google') {
+      const usageType = resolveUsageType({
+        isSubagent,
+        hideSequentialOutputs: agents[0]?.hide_sequential_outputs,
+        isLastAgent: agent.id === agents[agents.length - 1]?.id,
+      });
+      const modalities =
+        'responseModalities' in llmConfig && Array.isArray(llmConfig.responseModalities)
+          ? llmConfig.responseModalities.filter(
+              (value): value is string => typeof value === 'string',
+            )
+          : undefined;
+      Object.assign(llmConfig, {
+        nativeMedia: createDeferredNativeMediaPort(nativeMediaFactory, {
+          provider: String(provider),
+          model: selfModel ?? '',
+          agentId: agent.id,
+          usageType,
+          responseModalities: modalities,
+          apiKey:
+            'apiKey' in llmConfig && typeof llmConfig.apiKey === 'string'
+              ? llmConfig.apiKey
+              : undefined,
+          baseURL:
+            'baseUrl' in llmConfig && typeof llmConfig.baseUrl === 'string'
+              ? llmConfig.baseUrl
+              : undefined,
+        }),
+      });
+    }
 
     const joinInstructionMap = (map?: Record<string, unknown>) =>
       Object.values(map ?? {})

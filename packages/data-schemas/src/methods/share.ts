@@ -6,6 +6,7 @@ import {
   ContentTypes,
   FileSources,
   isConfiguredSender,
+  detachNativeIdentity,
 } from 'librechat-data-provider';
 import type { FilterQuery, Model } from 'mongoose';
 import type { SchemaWithMeiliMethods } from '~/models/plugins/mongoMeili';
@@ -14,6 +15,7 @@ import {
   sanitizeUIResourceContent,
   stripMessageUIResourceMarkers,
 } from '~/utils/stripUIResourceMarkers';
+import { collectMessageFileIds } from '~/utils/messageFiles';
 import { activeExpirationFilter } from '~/utils/retention';
 import { isValidObjectIdString } from '~/utils/objectId';
 import { MEILI_SEARCH_LIMIT } from '~/common/search';
@@ -119,6 +121,7 @@ const SENSITIVE_SHARED_FILE_FIELDS = new Set([
   'embedded',
   'usage',
   'metadata',
+  'renditions',
 ]);
 
 /**
@@ -182,21 +185,6 @@ function isLlmDeliveryPath(
   return value === 'provider' || value === 'text' || value === 'none';
 }
 
-/** Collect `file_id`s from a message's `files`/`attachments` array into `target`. */
-function collectFileIds(items: unknown, target: Set<string>): void {
-  if (!Array.isArray(items)) {
-    return;
-  }
-  for (const item of items) {
-    if (item && typeof item === 'object') {
-      const fileId = (item as { file_id?: unknown }).file_id;
-      if (typeof fileId === 'string' && fileId) {
-        target.add(fileId);
-      }
-    }
-  }
-}
-
 type SteerLikePart = { type?: unknown; files?: unknown };
 
 function isSteerPartWithFiles(part: unknown): part is SteerLikePart {
@@ -208,16 +196,14 @@ function isSteerPartWithFiles(part: unknown): part is SteerLikePart {
   );
 }
 
-/** Collect `file_id`s carried by steer parts inside a message's content array. */
-function collectSteerFileIds(content: unknown, target: Set<string>): void {
-  if (!Array.isArray(content)) {
-    return;
-  }
-  for (const part of content) {
-    if (isSteerPartWithFiles(part)) {
-      collectFileIds(part.files, target);
-    }
-  }
+type ImageFilePart = { type: ContentTypes.IMAGE_FILE; image_file?: t.SharedFile };
+
+function isImageFilePart(part: unknown): part is ImageFilePart {
+  return (
+    part != null &&
+    typeof part === 'object' &&
+    (part as ImageFilePart).type === ContentTypes.IMAGE_FILE
+  );
 }
 
 /**
@@ -239,9 +225,7 @@ async function buildFileSnapshots(
 
   const fileIds = new Set<string>();
   for (const message of messages) {
-    collectFileIds(message.files, fileIds);
-    collectFileIds(message.attachments, fileIds);
-    collectSteerFileIds(message.content, fileIds);
+    for (const fileId of collectMessageFileIds(message)) fileIds.add(fileId);
   }
 
   return readFileSnapshots(mongoose, fileIds, ownerId);
@@ -518,11 +502,8 @@ function applyShareFileRoute(
 }
 
 /**
- * Steer parts persisted inline in `message.content` carry the same user file
- * refs as a message's top-level `files`, so they follow the identical share
- * policy: dropped entirely when files are excluded from the link, sanitized and
- * rewritten to the share-scoped route (with anonymized ids) when included.
- * Returns the original array untouched when no steer part carries files.
+ * Inline files follow the same inclusion, sanitization and share-scoped routing
+ * policy as top-level attachments. Native continuation identity stays private.
  */
 export function anonymizeSharedContent(
   content: unknown[] | undefined,
@@ -548,7 +529,36 @@ export function anonymizeSharedContent(
   }
 
   for (let i = 0; i < content.length; i++) {
-    const part = result?.[i] ?? content[i];
+    const originalPart = result?.[i] ?? content[i];
+    const part =
+      originalPart != null && typeof originalPart === 'object'
+        ? detachNativeIdentity(originalPart)
+        : originalPart;
+    if (part !== originalPart) {
+      result ??= [...content];
+      result[i] = part;
+    }
+    if (isImageFilePart(part)) {
+      result ??= [...content];
+      const file = params.includeFiles ? sanitizeSharedFile(part.image_file) : null;
+      result[i] = file
+        ? {
+            ...part,
+            image_file: applyShareFileRoute(
+              {
+                ...file,
+                ...(file.conversationId !== undefined && { conversationId: params.newConvoId }),
+                ...(file.messageId !== undefined && { messageId: params.newMessageId }),
+              },
+              params.shareId,
+              params.snapshotIds,
+              params.textSourceIds,
+              params.deliveryPathById,
+            ),
+          }
+        : null;
+      continue;
+    }
     if (!isSteerPartWithFiles(part)) {
       continue;
     }
@@ -571,7 +581,7 @@ export function anonymizeSharedContent(
     result ??= [...content];
     result[i] = files ? { ...rest, files } : rest;
   }
-  return result ?? content;
+  return result?.filter((part) => part != null) ?? content;
 }
 
 /**
