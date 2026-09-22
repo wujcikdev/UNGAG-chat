@@ -23,6 +23,9 @@ const settingsContext: SettingsContextValue = {
   engineTTS: 'browser',
   langfuseConnectionAccess: false,
   adminPanelURL: '',
+  replyTabBadgeAllowed: true,
+  replyNotificationsAllowed: true,
+  replyNotificationSoundAllowed: true,
 };
 
 describe('settings registry', () => {
