@@ -249,6 +249,7 @@ const mockCleanupMCPRequestContextForReq = jest.fn(async (req) => {
 
 jest.mock('@librechat/data-schemas', () => ({
   logger: mockLogger,
+  createChatExpirationDate: jest.requireActual('@librechat/data-schemas').createChatExpirationDate,
 }));
 
 jest.mock('@librechat/api', () => ({
@@ -982,6 +983,38 @@ describe('ResumableAgentController resume metadata', () => {
     );
     expect(mockAcceptAgentStartupTelemetry).toHaveBeenCalledWith(req, conversationId);
     expect(mockStartupTelemetry.end).toHaveBeenCalledWith('error', expect.any(Error));
+  });
+
+  it('records a forced-temporary run as temporary, with a deadline, whatever the client sent', async () => {
+    const conversationId = 'conversation-ephemeral';
+    const initializeClient = jest.fn().mockRejectedValue(new Error('stop before tool loading'));
+    const req = {
+      user: { id: 'user-123' },
+      body: {
+        text: 'Hello',
+        messageId: 'user-message',
+        parentMessageId: 'parent-message',
+        conversationId,
+        isTemporary: false,
+        endpointOption: { endpoint: 'agents', modelOptions: { model: 'gpt-3.5-turbo' } },
+      },
+      config: { interfaceConfig: { retentionMode: 'ephemeral', temporaryChatRetention: 1 } },
+    };
+    const res = {
+      headersSent: true,
+      json: jest.fn(() => {
+        res.headersSent = true;
+      }),
+      status: jest.fn(() => res),
+    };
+
+    await AgentController(req, res, jest.fn(), initializeClient, null);
+
+    const [, , , options] = mockGenerationJobManager.createJob.mock.calls.at(-1);
+    expect(options.initialMetadata.isTemporary).toBe(true);
+    expect(new Date(options.initialMetadata.retentionExpiresAt).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
   });
 
   it('persists and exactly echoes protocol v2 on a newly created generation', async () => {

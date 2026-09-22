@@ -6,6 +6,8 @@ const {
   ErrorTypes,
   ViolationTypes,
   isEphemeralAgentId,
+  isAllDataRetention,
+  isForcedTemporaryRetention,
 } = require('librechat-data-provider');
 const {
   toPendingSteer,
@@ -1624,9 +1626,10 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         // Persist temporary-chat state so a HITL resume keeps the resumed response
         // non-persisted instead of trusting the resume request to re-send the flag.
         isTemporary:
-          req._agentEventBindingRetention?.isTemporary ??
-          req.resolvedConversation?.isTemporary ??
-          req.body?.isTemporary,
+          isForcedTemporaryRetention(req.config?.interfaceConfig?.retentionMode) ||
+          (req._agentEventBindingRetention?.isTemporary ??
+            req.resolvedConversation?.isTemporary ??
+            req.body?.isTemporary),
         ...((req._agentEventBindingRetention?.expiredAt ?? req.resolvedConversation?.expiredAt) !=
           null && {
           retentionExpiresAt: new Date(
@@ -1635,7 +1638,7 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
         }),
         ...((req._agentEventBindingRetention?.expiredAt ?? req.resolvedConversation?.expiredAt) ==
           null &&
-          req.config?.interfaceConfig?.retentionMode === 'all' && {
+          isAllDataRetention(req.config?.interfaceConfig?.retentionMode) && {
             retentionExpiresAt: createChatExpirationDate(
               req.config.interfaceConfig,
               req.resolvedConversation?.isTemporary ?? req.body?.isTemporary,

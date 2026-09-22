@@ -144,6 +144,32 @@ describe('Message Operations', () => {
   });
 
   describe('saveMessage', () => {
+    it('refuses to recreate a message that noUpsert protects', async () => {
+      const result = await saveMessage(
+        mockCtx,
+        { messageId: 'msg-deleted', conversationId: mockMessageData.conversationId },
+        { context: 'retention re-stamp', noUpsert: true },
+      );
+
+      expect(result).toBeNull();
+      expect(await Message.findOne({ messageId: 'msg-deleted', user: 'user123' })).toBeNull();
+    });
+
+    it('still re-stamps a message that is present under noUpsert', async () => {
+      await saveMessage(mockCtx, mockMessageData);
+
+      const result = await saveMessage(
+        { ...mockCtx, isTemporary: true, expiredAt: new Date('2030-01-01T00:00:00.000Z') },
+        { messageId: 'msg123', conversationId: mockMessageData.conversationId },
+        { context: 'retention re-stamp', noUpsert: true },
+      );
+
+      expect(result?.messageId).toBe('msg123');
+      const stored = await Message.findOne({ messageId: 'msg123', user: 'user123' });
+      expect(stored?.text).toBe('Hello, world!');
+      expect(stored?.expiredAt).toEqual(new Date('2030-01-01T00:00:00.000Z'));
+    });
+
     it('should save a message for an authenticated user', async () => {
       const result = await saveMessage(mockCtx, mockMessageData);
 
@@ -3576,6 +3602,30 @@ describe('Message Operations', () => {
       };
       const result = await saveMessage(mockCtx, mockMessageData);
       expect(result?.expiredAt).toBeNull();
+    });
+
+    it('should force temporary message and set expiredAt when retentionMode is EPHEMERAL even if isTemporary is false', async () => {
+      mockCtx.isTemporary = false;
+      mockCtx.interfaceConfig = {
+        temporaryChatRetention: 24,
+        retentionMode: RetentionMode.EPHEMERAL,
+      };
+      const result = await saveMessage(mockCtx, mockMessageData);
+      expect(result?.isTemporary).toBe(true);
+      expect(result?.expiredAt).toBeDefined();
+      expect(result?.expiredAt).toBeInstanceOf(Date);
+    });
+
+    it('should force temporary message when retentionMode is EPHEMERAL and isTemporary is omitted', async () => {
+      mockCtx.isTemporary = undefined;
+      mockCtx.interfaceConfig = {
+        temporaryChatRetention: 24,
+        retentionMode: RetentionMode.EPHEMERAL,
+      };
+      const result = await saveMessage(mockCtx, mockMessageData);
+      expect(result?.isTemporary).toBe(true);
+      expect(result?.expiredAt).toBeDefined();
+      expect(result?.expiredAt).toBeInstanceOf(Date);
     });
 
     it('should handle missing config gracefully', async () => {

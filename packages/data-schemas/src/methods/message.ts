@@ -1,6 +1,7 @@
 import {
   backgroundResultMetadata,
   HITL_MESSAGE_FILTER_FIELDS,
+  isForcedTemporaryRetention,
   RetentionMode,
 } from 'librechat-data-provider';
 import type { DeleteResult, FilterQuery, Model, Types, UpdateQuery } from 'mongoose';
@@ -657,7 +658,11 @@ export interface MessageMethods {
       newMessageId?: string;
       contextMeta?: IMessage['contextMeta'] | null;
     },
-    metadata?: { context?: string },
+    metadata?: {
+      context?: string;
+      /** Re-stamps an existing row only; a message deleted concurrently must not be recreated. */
+      noUpsert?: boolean;
+    },
   ): Promise<IMessage | null | undefined>;
   /**
    * Reads the references a trace viewer needs for one of the user's
@@ -881,7 +886,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
       /** `null` unsets a previously stored value; omission leaves it in place. */
       contextMeta?: IMessage['contextMeta'] | null;
     },
-    metadata?: { context?: string },
+    metadata?: { context?: string; noUpsert?: boolean },
   ) {
     if (!userId) {
       throw new Error('User not authenticated');
@@ -906,11 +911,23 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
       delete update.expiredAt;
       let retentionOnInsert: { expiredAt: Date; isTemporary: false } | undefined;
 
+      const forcedTemporary = isForcedTemporaryRetention(interfaceConfig?.retentionMode);
       if (expiredAt instanceof Date && !Number.isNaN(expiredAt.getTime())) {
-        if (typeof isTemporary === 'boolean') {
+        if (forcedTemporary) {
+          update.isTemporary = true;
+        } else if (typeof isTemporary === 'boolean') {
           update.isTemporary = isTemporary;
         }
         update.expiredAt = expiredAt;
+      } else if (forcedTemporary) {
+        update.isTemporary = true;
+        try {
+          update.expiredAt = createTempChatExpirationDate(interfaceConfig);
+        } catch (err) {
+          logger.error('Error creating temporary chat expiration date:', err);
+          logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
+          update.expiredAt = createFallbackRetentionDate();
+        }
       } else if (interfaceConfig?.retentionMode === RetentionMode.ALL) {
         if (typeof isTemporary === 'boolean') {
           update.isTemporary = isTemporary;
@@ -983,6 +1000,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
         params.isCreatedByUser === false && params.isUserSubmitted === undefined;
       const hasProvenance =
         userSubmittedPaths.length > 0 || userSubmittedMessageFieldPaths.length > 0;
+      const upsert = metadata?.noUpsert !== true;
       const message = hasProvenance
         ? await findOneAndMergeMessageProvenance(
             Message,
@@ -990,7 +1008,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
             update,
             userSubmittedPaths,
             userSubmittedMessageFieldPaths,
-            { upsert: true, stampModelOutputOnInsert, unsetContextMeta, retentionOnInsert },
+            { upsert, stampModelOutputOnInsert, unsetContextMeta, retentionOnInsert },
           )
         : await Message.findOneAndUpdate(
             { messageId: params.messageId, user: userId },
@@ -999,7 +1017,7 @@ export function createMessageMethods(mongoose: typeof import('mongoose')): Messa
               unsetContextMeta,
               retentionOnInsert,
             }),
-            { upsert: true, new: true },
+            { upsert, new: true },
           );
 
       if (message == null) {
