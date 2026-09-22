@@ -6,6 +6,8 @@ const {
   inspectContent,
   extractChatContent,
   contentFilterBlockResponse,
+  resolveReasoningOverride,
+  parseReasoningOverrideRequest,
 } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const {
@@ -69,6 +71,11 @@ async function buildEndpointOption(req, res, next) {
 
   const defaultParamsEndpoint = getDefaultParamsEndpoint(endpointsConfig, endpoint);
 
+  const reasoningOverrideRequest = parseReasoningOverrideRequest(req.body.reasoningOverride);
+  if (!reasoningOverrideRequest.ok) {
+    return handleError(res, { text: 'Invalid reasoning override' });
+  }
+
   let parsedBody;
   try {
     parsedBody = parseCompactConvo({
@@ -84,6 +91,7 @@ async function buildEndpointOption(req, res, next) {
 
   const appConfig = req.config;
   let appliedModelSpecPrivateFields = new Set();
+  let enforcedModelSpecFields = new Set();
   if (appConfig.modelSpecs?.list?.length && appConfig.modelSpecs?.enforce) {
     /** @type {{ list: TModelSpec[] }}*/
     const { list } = appConfig.modelSpecs;
@@ -114,6 +122,7 @@ async function buildEndpointOption(req, res, next) {
       });
     }
     const { modelSpec: currentModelSpec } = modelSpecResolution;
+    enforcedModelSpecFields = new Set(Object.keys(currentModelSpec.preset));
 
     try {
       const result = applyModelSpecPreset({
@@ -179,6 +188,31 @@ async function buildEndpointOption(req, res, next) {
     // TODO: use object params
     req.body = req.body || {}; // Express 5: ensure req.body exists
     req.body.endpointOption = await builder(endpoint, parsedBody, endpointType);
+
+    const { reasoningOverride } = reasoningOverrideRequest;
+    if (reasoningOverride != null) {
+      const resolution = await resolveReasoningOverride({
+        reasoningOverride,
+        endpointOption: req.body.endpointOption,
+        endpoint,
+        endpointType,
+        parsedModel: parsedBody.model,
+        isAgent: isAgents,
+        endpointsConfig,
+        defaultParamsEndpoint,
+        appliedModelSpecPrivateFields,
+        enforcedModelSpecFields,
+        reasoningOverrideBase: req.reasoningOverrideBase,
+      });
+      if (!resolution.ok) {
+        return handleError(res, { text: 'Invalid reasoning override' });
+      }
+      req.reasoningOverrideBase = resolution.reasoningOverrideBase;
+      req.body.endpointOption = {
+        ...req.body.endpointOption,
+        model_parameters: resolution.modelParameters,
+      };
+    }
 
     if (req.body.files && !isAgents) {
       req.body.endpointOption.attachments = updateFilesUsage(req.body.files, undefined, {

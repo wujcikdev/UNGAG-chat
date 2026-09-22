@@ -30,6 +30,7 @@ const {
   seedTurnConversation,
   needsRetentionConversation,
   getConversationWriteContext,
+  resolvePersistedReasoningOverride,
 } = require('@librechat/api');
 const {
   Constants,
@@ -607,6 +608,15 @@ class BaseClient {
       if (referencedQuotes != null) {
         userMessage.quotes = referencedQuotes;
       }
+    }
+
+    const persistedReasoningOverride = resolvePersistedReasoningOverride({
+      rawReasoningOverride: this.options.req?.body?.reasoningOverride,
+      isEdited: opts.isEdited,
+      isCompaction: opts.isCompaction,
+    });
+    if (persistedReasoningOverride !== undefined) {
+      userMessage.reasoningOverride = persistedReasoningOverride;
     }
 
     if (typeof opts?.getReqData === 'function') {
