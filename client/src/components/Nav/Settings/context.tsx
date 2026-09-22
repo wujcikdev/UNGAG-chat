@@ -34,6 +34,10 @@ export function useSettingsContext(): SettingsContextValue {
   const twoFactorEnabled = user?.twoFactorEnabled === true;
   const allowAccountDeletion = startupConfig?.allowAccountDeletion !== false;
   const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
+  const replyNotificationsConfig = startupConfig?.interface?.replyNotifications;
+  const replyTabBadgeAllowed = replyNotificationsConfig?.tabBadge !== false;
+  const replyNotificationsAllowed = replyNotificationsConfig?.desktop !== false;
+  const replyNotificationSoundAllowed = replyNotificationsConfig?.sound !== false;
   const hasRemoteAgentsBool = hasRemoteAgents === true;
   const hasMultiConvoBool = hasMultiConvo === true;
   const hasPromptsBool = hasPrompts === true;
@@ -59,6 +63,9 @@ export function useSettingsContext(): SettingsContextValue {
       engineTTS,
       langfuseConnectionAccess,
       adminPanelURL,
+      replyTabBadgeAllowed,
+      replyNotificationsAllowed,
+      replyNotificationSoundAllowed,
     }),
     [
       balanceEnabled,
@@ -76,6 +83,9 @@ export function useSettingsContext(): SettingsContextValue {
       engineTTS,
       langfuseConnectionAccess,
       adminPanelURL,
+      replyTabBadgeAllowed,
+      replyNotificationsAllowed,
+      replyNotificationSoundAllowed,
     ],
   );
 }
