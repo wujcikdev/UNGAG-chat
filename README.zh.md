@@ -163,7 +163,7 @@ LibreChat 是一个自托管的 AI 对话平台，在一个注重隐私的统一
 ## 🌐 资源
 
 **GitHub 仓库：**
-  - **RAG API:** [github.com/LibreChat-AI/rag_api](https://github.com/LibreChat-AI/rag_api)
+  - **RAG API:** [github.com/LibreChat-AI/rag-api](https://github.com/LibreChat-AI/rag-api)
   - **网站:** [github.com/LibreChat-AI/librechat.ai](https://github.com/LibreChat-AI/librechat.ai)
 
 **其他：**
