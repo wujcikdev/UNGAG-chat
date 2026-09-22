@@ -247,6 +247,7 @@
         "react-transition-group": "^4.4.5",
         "react-virtualized": "^9.22.6",
         "react-vtree": "^3.0.0",
+        "react-window": "1.8.11",
         "recoil": "^0.7.7",
         "regenerator-runtime": "^0.14.1",
         "rehype-highlight": "^6.0.0",
@@ -3866,6 +3867,8 @@
 
     "meilisearch": ["meilisearch@0.38.0", "", { "dependencies": { "cross-fetch": "^3.1.6" } }, "sha512-bHaq8nYxSKw9/Qslq1Zes5g9tHgFkxy/I9o8942wv2PqlNOT0CzptIkh/x98N52GikoSZOXSQkgt6oMjtf5uZw=="],
 
+    "memoize-one": ["memoize-one@5.2.1", "", {}, "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q=="],
+
     "memory-pager": ["memory-pager@1.5.0", "", {}, "sha512-ZS4Bp4r/Zoeq6+NLJpP+0Zzm0pR8whtGPf1XExKLJBAczGMnSi3It14OiNCStjQjM6NU1okjQGSxgEZN8eBYKg=="],
 
     "memorystore": ["memorystore@1.6.8", "", { "dependencies": { "debug": "^4.3.0", "lru-cache": "^4.0.3" } }, "sha512-kC3svB2LXnLAnndjxKjXy8FkrScazufhNweSd2JyJAKbK3jXYfL38qf/GI6tAQp6VXQ5QoNLdcO2qIg5g45EVQ=="],
@@ -4344,7 +4347,7 @@
 
     "react-vtree": ["react-vtree@3.0.0", "", { "dependencies": { "react-merge-refs": "3.0.2" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18", "react-window": ">= 1.8.5" } }, "sha512-YJoUVzDAJ0Xy0R8nv1JpzxFrrAaa4ZUBtkkis6nE2i7LnA+HI12rMI/mXVRUE8EZN1BTtmvG+l0xzTbCmwFYpQ=="],
 
-    "react-window": ["react-window@2.3.2", "", { "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-wafQXYbEcGVDcGhaONxZGvH+IAXIn2hhiRvVfmbrAE40Dn5YsqhCfeXAzFZPKSUxQVHs5cQqrNhvigY7TDpR6w=="],
+    "react-window": ["react-window@1.8.11", "", { "dependencies": { "@babel/runtime": "^7.0.0", "memoize-one": ">=3.1.1 <6" }, "peerDependencies": { "react": "^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-+SRbUVT2scadgFSWx+R1P754xHPEqvcfSfVX10QYg6POOz+WNgkN48pS+BtZNIMGiL1HYrSEiCkwsMS15QogEQ=="],
 
     "readable-stream": ["readable-stream@2.3.8", "", { "dependencies": { "core-util-is": "~1.0.0", "inherits": "~2.0.3", "isarray": "~1.0.0", "process-nextick-args": "~2.0.0", "safe-buffer": "~5.1.1", "string_decoder": "~1.1.1", "util-deprecate": "~1.0.1" } }, "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA=="],
 
