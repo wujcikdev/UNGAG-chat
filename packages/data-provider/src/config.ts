@@ -30,7 +30,11 @@ import {
   MAX_SUBAGENTS_CEILING,
   DEFAULT_MAX_RETAINED_TOOL_COUNT_CHARS,
 } from './limits';
-import { CODE_ENVIRONMENT_DECISION_VERSION, CODE_ENVIRONMENT_MOVE_VERSION } from './code/workspace';
+import {
+  CODE_ENVIRONMENT_DECISION_VERSION,
+  CODE_ENVIRONMENT_MOVE_VERSION,
+  CODE_ENVIRONMENT_TRANSITION_VERSION,
+} from './code/workspace';
 import { ComponentTypes, SettingTypes, OptionTypes } from './generate';
 import { STATEFUL_CODE_ENVIRONMENTS } from './stateful-code';
 import { specsConfigSchema, TSpecsConfig } from './models';
@@ -1332,6 +1336,9 @@ export const agentsEndpointSchema = baseEndpointSchema
           conversationMoves: z
             .object({
               enabled: z.boolean().optional(),
+              /** Opt in after every API replica supports attach/detach. Omitted or false keeps
+               * the existing move-only policy, including for already-enabled deployments. */
+              allowAttachDetach: z.boolean().optional(),
             })
             .optional(),
           /** Operator-managed execution environments. Attached entries route to a
@@ -2317,6 +2324,9 @@ export type TStartupConfig = {
   /** Owner moves of a sealed code-environment decision supported by the API. Clients must not
    * offer to move a conversation unless this is advertised. */
   codeEnvironmentMoveVersion?: typeof CODE_ENVIRONMENT_MOVE_VERSION;
+  /** Owner attach and detach of a sealed code-environment decision supported by the API. Clients
+   * must not offer either unless this is advertised, independently of the move version. */
+  codeEnvironmentTransitionVersion?: typeof CODE_ENVIRONMENT_TRANSITION_VERSION;
   interface?: TInterfaceConfig;
   turnstile?: TTurnstileConfig;
   balance?: TBalanceConfig;

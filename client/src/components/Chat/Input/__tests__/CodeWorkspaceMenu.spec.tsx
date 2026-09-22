@@ -1,4 +1,5 @@
 import { AxiosError } from 'axios';
+import { Provider, createStore } from 'jotai';
 import userEvent from '@testing-library/user-event';
 import { dataService } from 'librechat-data-provider';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -6,6 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { TConversation } from 'librechat-data-provider';
 import type { AxiosResponse } from 'axios';
 import type { CodeWorkspaceResult } from '~/hooks';
+import { codeEnvironmentReconciliationsAtom } from '~/store/codeEnvironmentReconciliation';
+import { useConversationCodeEnvironmentRecovery } from '~/data-provider';
 import CodeWorkspaceMenu from '../CodeWorkspaceMenu';
 
 const mockShowToast = jest.fn();
@@ -57,6 +60,7 @@ function workspace(overrides: Partial<CodeWorkspaceResult> = {}): CodeWorkspaceR
     mode: 'attached',
     state: 'ready',
     canSubmit: true,
+    visible: true,
     environments: [
       {
         environment,
@@ -88,6 +92,62 @@ function renderMenu(ui: React.ReactElement) {
 }
 
 describe('CodeWorkspaceMenu', () => {
+  test('explains a failed reconciliation and retries without permitting workspace changes', async () => {
+    const store = createStore();
+    const request = {
+      conversationId: 'existing',
+      attempted: {
+        codeEnvironmentMode: 'attached' as const,
+        codeWorkspaces: [{ environmentId: 'personal-vm', workspaceId: 'project-a' }],
+      },
+    };
+    store.set(
+      codeEnvironmentReconciliationsAtom,
+      new Map([['existing', { request, status: 'error', token: Symbol() }]]),
+    );
+    let resolveRead!: (value: TConversation) => void;
+    const read = jest.spyOn(dataService, 'getConversationById').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const setter = jest.fn();
+    function RecoveryMenu() {
+      const recovery = useConversationCodeEnvironmentRecovery('existing');
+      return (
+        <CodeWorkspaceMenu
+          setConversation={setter}
+          workspace={workspace({ visible: recovery != null, recovery })}
+          disabled={false}
+        />
+      );
+    }
+    renderMenu(
+      <Provider store={store}>
+        <RecoveryMenu />
+      </Provider>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('com_ui_code_workspace_reconcile_failed');
+    expect(screen.queryByTestId('code-workspace')).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'com_ui_code_workspace_reconcile_retry' }),
+    );
+    await waitFor(() => expect(read).toHaveBeenCalledWith('existing'));
+    expect(
+      screen.getByRole('button', { name: 'com_ui_code_workspace_reconcile_retry' }),
+    ).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('com_ui_code_workspace_reconciling');
+    resolveRead({
+      ...conversation,
+      conversationId: 'existing',
+      codeEnvironmentMode: 'without_attached',
+    });
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(setter).toHaveBeenCalledTimes(1);
+    read.mockRestore();
+  });
+
   test('shows the instruction file and truncation reported by the worker', async () => {
     const state = workspace();
     state.environments[0].workspaces[0].instructions = [
@@ -234,12 +294,13 @@ describe('CodeWorkspaceMenu', () => {
     renderMenu(
       <CodeWorkspaceMenu
         setConversation={jest.fn()}
-        workspace={workspace({ locked: true })}
+        workspace={workspace({ locked: true, visible: false })}
         disabled={false}
       />,
     );
 
     expect(screen.queryByTestId('code-workspace')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('code-workspace-locked-status')).not.toBeInTheDocument();
   });
 
   test('shows recovery status when a locked workspace is unavailable', () => {
@@ -264,6 +325,173 @@ describe('CodeWorkspaceMenu', () => {
     );
   });
 
+  test('explains a chat that recorded running without a workspace and cannot attach one', () => {
+    renderMenu(
+      <CodeWorkspaceMenu
+        setConversation={jest.fn()}
+        workspace={workspace({
+          locked: true,
+          mode: 'without_attached',
+          state: 'without_attached',
+          selections: undefined,
+        })}
+        disabled={false}
+      />,
+    );
+
+    expect(screen.getByTestId('code-workspace-locked-status')).toHaveAccessibleName(
+      'com_ui_code_workspace_without_attached. com_ui_code_workspace_without_attached_info',
+    );
+  });
+
+  describe('a saved chat that has been running without a workspace', () => {
+    const attached = { environmentId: environment.id, workspaceId: 'project-a' };
+    const sealed = { ...conversation, conversationId: 'existing' } as TConversation;
+    const attachable = (rememberSelection = jest.fn()) =>
+      workspace({
+        locked: true,
+        mode: 'without_attached',
+        state: 'without_attached',
+        selections: undefined,
+        rememberSelection,
+        environments: [
+          {
+            environment,
+            state: 'choose',
+            workspaces: [{ id: 'project-a', name: 'Project A' }],
+            selected: undefined,
+          },
+        ],
+        transition: {
+          kind: 'attach',
+          conversationId: 'existing',
+          from: [],
+          previous: [],
+          retained: [],
+          detachable: false,
+          targets: [
+            {
+              environment,
+              state: 'choose',
+              workspaces: [{ id: 'project-a', name: 'Project A' }],
+              selected: undefined,
+            },
+          ],
+        },
+      });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    test('attaches a workspace while still naming where the chat runs', async () => {
+      const moveSpy = jest.spyOn(dataService, 'moveConversationCodeEnvironment').mockResolvedValue({
+        conversationId: 'existing',
+        codeEnvironmentMode: 'attached',
+        codeWorkspaces: [attached],
+      });
+      const setConversation = jest.fn();
+      const rememberSelection = jest.fn();
+      renderMenu(
+        <CodeWorkspaceMenu
+          setConversation={setConversation}
+          workspace={attachable(rememberSelection)}
+          disabled={false}
+        />,
+      );
+
+      /** The control keeps reading "no attached workspace"; attaching one is what it offers. */
+      const chip = screen.getByTestId('code-workspace');
+      expect(chip).toHaveTextContent('com_ui_code_workspace_without_attached');
+      await userEvent.click(chip);
+      expect(screen.getByText('com_ui_code_workspace_attach_info')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('menuitem', { name: /com_ui_code_workspace_detach/ }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        await screen.findByRole('menuitem', { name: /com_ui_code_workspace_attach/ }),
+      );
+
+      await waitFor(() => expect(moveSpy).toHaveBeenCalledTimes(1));
+      expect(moveSpy).toHaveBeenCalledWith({
+        conversationId: 'existing',
+        from: [],
+        to: [attached],
+      });
+      expect(rememberSelection).toHaveBeenCalledWith(attached);
+      const update = setConversation.mock.calls[0][0];
+      expect(update(sealed)).toEqual({
+        ...sealed,
+        codeEnvironmentMode: 'attached',
+        codeWorkspaces: [attached],
+      });
+    });
+  });
+
+  describe('a chat sealed to a machine it can no longer reach', () => {
+    const mac = { environmentId: 'mac', workspaceId: 'primary' };
+    const sealed = { ...conversation, conversationId: 'existing' } as TConversation;
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    test.each(['offline', 'no-longer-used'])(
+      'continues without the %s workspace',
+      async (scenario) => {
+        const moveSpy = jest
+          .spyOn(dataService, 'moveConversationCodeEnvironment')
+          .mockResolvedValue({
+            conversationId: 'existing',
+            codeEnvironmentMode: 'without_attached',
+          });
+        const setConversation = jest.fn();
+        renderMenu(
+          <CodeWorkspaceMenu
+            setConversation={setConversation}
+            workspace={workspace({
+              locked: true,
+              required: scenario === 'offline',
+              canSubmit: scenario !== 'offline',
+              state: scenario === 'offline' ? 'unavailable' : 'not_required',
+              selections: undefined,
+              environments:
+                scenario === 'offline'
+                  ? [{ environment, state: 'unavailable', workspaces: [], selected: undefined }]
+                  : [],
+              transition: {
+                kind: 'move',
+                conversationId: 'existing',
+                from: [mac],
+                previous: scenario === 'offline' ? [] : [{ id: 'mac', name: 'Danny Mac' }],
+                retained: [],
+                targets: [],
+                detachable: true,
+              },
+            })}
+            disabled={false}
+          />,
+        );
+
+        await userEvent.click(screen.getByTestId('code-workspace'));
+        /** Nothing to move onto, so the only decision left is to stop waiting for the machine. */
+        expect(
+          screen.queryByRole('menuitem', { name: /com_ui_code_workspace_move/ }),
+        ).not.toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('code-workspace-detach'));
+
+        await waitFor(() => expect(moveSpy).toHaveBeenCalledTimes(1));
+        expect(moveSpy).toHaveBeenCalledWith({ conversationId: 'existing', from: [mac], to: [] });
+        const update = setConversation.mock.calls[0][0];
+        expect(update(sealed)).toEqual({
+          ...sealed,
+          codeEnvironmentMode: 'without_attached',
+          codeWorkspaces: undefined,
+        });
+      },
+    );
+  });
+
   describe('a chat sealed to a machine its agent no longer uses', () => {
     const mac = { environmentId: 'mac', workspaceId: 'primary' };
     const moved = { environmentId: environment.id, workspaceId: 'project-a' };
@@ -275,7 +503,7 @@ describe('CodeWorkspaceMenu', () => {
       baseURL: 'https://team.example.com',
     };
 
-    type Target = NonNullable<CodeWorkspaceResult['relocation']>['targets'][number];
+    type Target = NonNullable<CodeWorkspaceResult['transition']>['targets'][number];
     const target = (
       targetEnvironment: Target['environment'],
       workspaces: Target['workspaces'],
@@ -294,12 +522,14 @@ describe('CodeWorkspaceMenu', () => {
         selections: undefined,
         rememberSelection,
         environments: targets,
-        relocation: {
+        transition: {
+          kind: 'move',
           conversationId: 'existing',
           from: [mac],
           previous: [{ id: 'mac', name: 'Danny Mac' }],
           retained: [],
           targets,
+          detachable: true,
         },
       });
 
@@ -412,7 +642,7 @@ describe('CodeWorkspaceMenu', () => {
           setConversation={jest.fn()}
           workspace={{
             ...firstChat,
-            relocation: { ...firstChat.relocation!, conversationId: 'another-chat' },
+            transition: { ...firstChat.transition!, conversationId: 'another-chat' },
           }}
           disabled={false}
         />,
@@ -438,8 +668,8 @@ describe('CodeWorkspaceMenu', () => {
           setConversation={setConversation}
           workspace={{
             ...base,
-            relocation: {
-              ...base.relocation!,
+            transition: {
+              ...base.transition!,
               from: [mac, moved],
               previous: [{ id: 'mac', name: 'Danny Mac' }],
               retained: [moved],

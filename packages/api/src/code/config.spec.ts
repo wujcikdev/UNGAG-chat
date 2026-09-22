@@ -5,6 +5,7 @@ import {
   mergeAccessibleCodeEnvironments,
   resolveCodeEnvironmentDecisionVersion,
   resolveCodeEnvironmentMoveVersion,
+  resolveCodeEnvironmentTransitionVersion,
 } from './config';
 
 describe('resolveCodeEnvironmentDecisionVersion', () => {
@@ -21,7 +22,7 @@ describe('resolveCodeEnvironmentDecisionVersion', () => {
 });
 
 describe('resolveCodeEnvironmentMoveVersion', () => {
-  const withMoves = (conversationMoves?: { enabled?: boolean }) =>
+  const withMoves = (conversationMoves?: { enabled?: boolean; allowAttachDetach?: boolean }) =>
     ({
       endpoints: {
         [EModelEndpoint.agents]: {
@@ -33,6 +34,32 @@ describe('resolveCodeEnvironmentMoveVersion', () => {
   it('advertises moves only where the effective policy enables them', () => {
     expect(resolveCodeEnvironmentMoveVersion(withMoves({ enabled: true }))).toBe(1);
   });
+
+  /* Attaching and leaving ship under the same policy as the move but on their own number, so a
+   * client that predates them keeps reading a move version it understands. */
+  it.each([undefined, false])(
+    'preserves enabled move-only policy with allowAttachDetach=%s',
+    (allowAttachDetach) => {
+      const config = withMoves({ enabled: true, allowAttachDetach });
+      expect(resolveCodeEnvironmentMoveVersion(config)).toBe(1);
+      expect(resolveCodeEnvironmentTransitionVersion(config)).toBeUndefined();
+    },
+  );
+
+  it('advertises attach and detach separately from the move', () => {
+    expect(
+      resolveCodeEnvironmentTransitionVersion(
+        withMoves({ enabled: true, allowAttachDetach: true }),
+      ),
+    ).toBe(2);
+  });
+
+  it.each([undefined, {}, { enabled: false }])(
+    'keeps attach and detach off wherever moves are off: %j',
+    (conversationMoves) => {
+      expect(resolveCodeEnvironmentTransitionVersion(withMoves(conversationMoves))).toBeUndefined();
+    },
+  );
 
   it.each([undefined, {}, { enabled: false }])(
     'keeps sealed decisions immovable by default: %j',
