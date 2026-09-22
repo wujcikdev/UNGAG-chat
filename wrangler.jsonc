@@ -1,0 +1,11 @@
+// Deploys the built frontend (client/dist) as a Workers static-assets SPA.
+// The Node backend cannot run on Cloudflare Workers; it must be hosted
+// separately and reached over the network.
+{
+  "name": "ungag-chat",
+  "compatibility_date": "2026-09-22",
+  "assets": {
+    "directory": "./client/dist",
+    "not_found_handling": "single-page-application"
+  }
+}
