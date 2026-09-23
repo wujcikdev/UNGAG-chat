@@ -3,7 +3,8 @@
  *
  * Serves the built frontend from the ASSETS binding and answers the
  * API surface the client needs to boot without a real server: a fake
- * logged-in user (no login screen), empty conversations, and REAL AI
+ * logged-in user (the /api/auth/refresh contract returns a token, so
+ * no login screen ever appears), empty conversations, and REAL AI
  * replies via the Cloudflare Workers AI binding. Conversation history
  * is not persisted (no database on Workers); each message is answered
  * without prior context. Falls back to a canned reply if the AI
@@ -13,6 +14,8 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+const DEMO_TOKEN = 'demo-token-ungag';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -99,6 +102,37 @@ function conversationResponse() {
   return { conversations: [], page: 1, pages: 1, pageNumber: 0, pageSize: 10, total: 0 };
 }
 
+function roleResponse(roleName) {
+  return {
+    name: roleName,
+    permissions: {
+      PROMPTS: { USE: true, CREATE: true, SHARE: true, SHARE_PUBLIC: true },
+      BOOKMARKS: { USE: true },
+      MEMORIES: { USE: true, CREATE: true, UPDATE: true, READ: true, OPT_OUT: true },
+      AGENTS: { USE: true, CREATE: true, SHARE: true, SHARE_PUBLIC: true },
+      MULTI_CONVO: { USE: true },
+      TEMPORARY_CHAT: { USE: true },
+      RUN_CODE: { USE: true },
+      WEB_SEARCH: { USE: true },
+      PEOPLE_PICKER: { VIEW_USERS: true, VIEW_GROUPS: true, VIEW_ROLES: true },
+      MARKETPLACE: { USE: true },
+      FILE_SEARCH: { USE: true },
+      FILE_CITATIONS: { USE: true },
+      MCP_SERVERS: {
+        USE: true,
+        CREATE: true,
+        SHARE: true,
+        SHARE_PUBLIC: true,
+        CONFIGURE_OBO: true,
+      },
+      REMOTE_AGENTS: { USE: true, CREATE: true, SHARE: true, SHARE_PUBLIC: true },
+      SKILLS: { USE: true, CREATE: true, SHARE: true, SHARE_PUBLIC: true },
+      SHARED_LINKS: { CREATE: true, SHARE: true, SHARE_PUBLIC: true },
+      SCHEDULES: { USE: true, CREATE: true },
+    },
+  };
+}
+
 async function aiSseResponse(env, userText) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -167,6 +201,14 @@ async function handleApi(pathname, request, env) {
       return json(USER);
     case '/api/user/terms':
       return json({ termsAccepted: true });
+    case '/api/auth/refresh':
+      return json({ token: DEMO_TOKEN, user: USER });
+    case '/api/auth/login':
+      return json({ token: DEMO_TOKEN, user: USER, twoFAPending: false });
+    case '/api/auth/logout':
+      return json({ message: 'ok' });
+    case '/api/presets':
+      return json([]);
     case '/api/config':
       return json(STARTUP_CONFIG);
     case '/api/endpoints':
@@ -197,6 +239,10 @@ async function handleApi(pathname, request, env) {
       return json({ hits: [] });
     default:
       break;
+  }
+  if (pathname.startsWith('/api/roles/')) {
+    const roleName = (pathname.split('/').pop() || 'USER').toUpperCase();
+    return json(roleResponse(roleName));
   }
   if (pathname.startsWith('/api/convos/')) {
     return json(conversationResponse());
