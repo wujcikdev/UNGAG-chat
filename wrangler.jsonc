@@ -1,11 +1,15 @@
-// Deploys the built frontend (client/dist) as a Workers static-assets SPA.
-// The Node backend cannot run on Cloudflare Workers; it must be hosted
-// separately and reached over the network.
+// Deploys the built frontend (client/dist) with a minimal demo API worker.
+// The worker auto-logs-in a fake user and serves canned replies so the site
+// is usable without a real backend; the Node backend must still be hosted
+// separately for real AI conversations.
 {
   "name": "ungag-chat",
+  "main": "worker/worker.js",
   "compatibility_date": "2026-09-22",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./client/dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
   }
 }
