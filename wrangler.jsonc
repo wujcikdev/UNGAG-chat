@@ -6,6 +6,7 @@
   "name": "ungag-chat",
   "main": "worker/worker.js",
   "compatibility_date": "2026-09-22",
+  "ai": { "binding": "AI" },
   "assets": {
     "binding": "ASSETS",
     "directory": "./client/dist",

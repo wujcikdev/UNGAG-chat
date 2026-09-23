@@ -3,11 +3,16 @@
  *
  * Serves the built frontend from the ASSETS binding and answers the
  * API surface the client needs to boot without a real server: a fake
- * logged-in user (no login screen), empty conversations, and a canned
- * reply stream when a message is sent. Not a real backend.
+ * logged-in user (no login screen), empty conversations, and REAL AI
+ * replies via the Cloudflare Workers AI binding. Conversation history
+ * is not persisted (no database on Workers); each message is answered
+ * without prior context. Falls back to a canned reply if the AI
+ * binding is unavailable.
  */
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+const AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -29,7 +34,7 @@ const USER = {
 };
 
 const STARTUP_CONFIG = {
-  appTitle: 'UNGAG Chat (demo)',
+  appTitle: 'UNGAG Chat',
   serverDomain: '',
   analyticsGloballyEnabled: false,
   socialLogins: [],
@@ -78,28 +83,26 @@ const STARTUP_CONFIG = {
 const ENDPOINTS_CONFIG = {
   openAI: {
     type: 'openAI',
-    label: 'OpenAI (demo)',
+    label: 'OpenAI',
     order: 0,
     disabled: false,
-    welcomeForm: undefined,
   },
 };
 
-const MODELS_CONFIG = { openAI: ['demo-gpt'] };
+const MODELS_CONFIG = { openAI: ['llama-3.3-70b'] };
 
-const CANNED_REPLY =
-  'Cześć! To jest tryb demo hostowany na Cloudflare - brak tu prawdziwego modelu AI i bazy danych. ' +
-  'Interfejs dziala w pelni, ale odpowiedzi sa przygotowane z gory. ' +
-  'Aby uruchomic prawdziwy czat, nalezy podlaczyc backend zgodnie z planem (Hugging Face + MongoDB Atlas).';
+const FALLBACK_REPLY =
+  'AI jest chwilowo niedostepne w tym demie (limit Cloudflare wyczerpany lub blad bindowania). ' +
+  'Sprobuj ponownie pozniej.';
 
 function conversationResponse() {
   return { conversations: [], page: 1, pages: 1, pageNumber: 0, pageSize: 10, total: 0 };
 }
 
-function sseResponse() {
+async function aiSseResponse(env, userText) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       const conversationId = `demo-${Date.now().toString(36)}`;
       const messageId = `msg-${Date.now().toString(36)}`;
@@ -110,27 +113,42 @@ function sseResponse() {
           parentMessageId: '000000000000000000000000',
           text: '',
           endpoint: 'openAI',
-          model: 'demo-gpt',
+          model: 'llama-3.3-70b',
           isCreatedByUser: false,
-          sender: 'Demo',
+          sender: 'AI',
           unfinished: true,
           error: false,
         },
         initial: true,
-        conversation: { conversationId, title: 'Demo conversation' },
+        conversation: { conversationId, title: userText.slice(0, 40) || 'New chat' },
       });
-      const chunks = CANNED_REPLY.match(/.{1,40}/g) || [];
-      let i = 0;
-      const timer = setInterval(() => {
-        if (i < chunks.length) {
-          send({ message: chunks[i], initial: false });
-          i += 1;
-        } else {
-          clearInterval(timer);
-          send({ final: true, message: '', conversation: { conversationId } });
-          controller.close();
+      try {
+        if (!env.AI) {
+          throw new Error('AI binding unavailable');
         }
-      }, 60);
+        const result = await env.AI.run(AI_MODEL, {
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a helpful assistant. Reply in the same language the user writes in. Be concise.',
+            },
+            { role: 'user', content: userText },
+          ],
+          stream: true,
+          max_tokens: 1024,
+        });
+        for await (const chunk of result) {
+          const text = chunk && chunk.response;
+          if (typeof text === 'string' && text.length > 0) {
+            send({ message: text, initial: false });
+          }
+        }
+      } catch (_err) {
+        send({ message: FALLBACK_REPLY, initial: false });
+      }
+      send({ final: true, message: '', conversation: { conversationId } });
+      controller.close();
     },
   });
   return new Response(stream, {
@@ -143,7 +161,7 @@ function sseResponse() {
   });
 }
 
-function handleApi(pathname) {
+async function handleApi(pathname, request, env) {
   switch (pathname) {
     case '/api/user':
       return json(USER);
@@ -194,7 +212,16 @@ function handleApi(pathname) {
     pathname.startsWith('/api/edit/') ||
     pathname.startsWith('/api/agents/chat')
   ) {
-    return sseResponse();
+    let userText = 'Hello';
+    try {
+      const body = await request.json();
+      if (body && typeof body.text === 'string' && body.text.trim().length > 0) {
+        userText = body.text.trim();
+      }
+    } catch (_e) {
+      // keep default text
+    }
+    return aiSseResponse(env, userText);
   }
   return json({});
 }
@@ -206,7 +233,7 @@ export default {
       return json({ message: 'demo', status: 'ok' });
     }
     if (pathname.startsWith('/api/')) {
-      return handleApi(pathname);
+      return handleApi(pathname, request, env);
     }
     return env.ASSETS.fetch(request);
   },
