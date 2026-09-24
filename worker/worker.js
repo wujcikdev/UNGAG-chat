@@ -201,6 +201,14 @@ async function handleApi(pathname, request, env) {
       return json(USER);
     case '/api/user/terms':
       return json({ termsAccepted: true });
+    case '/api/user/settings/favorites':
+      return json([]);
+    case '/api/user/settings/pinned-order':
+      return json([]);
+    case '/api/user/settings/favorites/tools':
+      return json([]);
+    case '/api/user/settings/skills/active':
+      return json({});
     case '/api/auth/refresh':
       return json({ token: DEMO_TOKEN, user: USER });
     case '/api/auth/login':
