@@ -133,10 +133,67 @@ function roleResponse(roleName) {
   };
 }
 
+async function streamOpenRouter(env, messages, send) {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+      messages,
+      stream: true,
+    }),
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`OpenRouter HTTP ${response.status}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) {
+        continue;
+      }
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]') {
+        return;
+      }
+      try {
+        const chunk = JSON.parse(data);
+        const text = chunk.choices?.[0]?.delta?.content;
+        if (typeof text === 'string' && text.length > 0) {
+          send({ message: text, initial: false });
+        }
+      } catch (_err) {
+        // ignore malformed chunks
+      }
+    }
+  }
+}
+
 async function aiSseResponse(env, userText) {
-  const encoder = new TextEncoder();
+  const messages = [
+    {
+      role: 'system',
+      content:
+        'You are a helpful assistant. Reply in the same language the user writes in. Be concise.',
+    },
+    { role: 'user', content: userText },
+  ];
   const stream = new ReadableStream({
     async start(controller) {
+      const encoder = new TextEncoder();
       const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       const conversationId = `demo-${Date.now().toString(36)}`;
       const messageId = `msg-${Date.now().toString(36)}`;
@@ -157,25 +214,22 @@ async function aiSseResponse(env, userText) {
         conversation: { conversationId, title: userText.slice(0, 40) || 'New chat' },
       });
       try {
-        if (!env.AI) {
-          throw new Error('AI binding unavailable');
-        }
-        const result = await env.AI.run(AI_MODEL, {
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a helpful assistant. Reply in the same language the user writes in. Be concise.',
-            },
-            { role: 'user', content: userText },
-          ],
-          stream: true,
-          max_tokens: 1024,
-        });
-        for await (const chunk of result) {
-          const text = chunk && chunk.response;
-          if (typeof text === 'string' && text.length > 0) {
-            send({ message: text, initial: false });
+        if (env.OPENROUTER_API_KEY) {
+          await streamOpenRouter(env, messages, send);
+        } else {
+          if (!env.AI) {
+            throw new Error('AI binding unavailable');
+          }
+          const result = await env.AI.run(AI_MODEL, {
+            messages,
+            stream: true,
+            max_tokens: 1024,
+          });
+          for await (const chunk of result) {
+            const text = chunk && chunk.response;
+            if (typeof text === 'string' && text.length > 0) {
+              send({ message: text, initial: false });
+            }
           }
         }
       } catch (_err) {
