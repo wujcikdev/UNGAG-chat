@@ -236,7 +236,7 @@ async function handleApi(pathname, request, env) {
     case '/api/banner':
       return json([]);
     case '/api/tags':
-      return json({ tags: [] });
+      return json([]);
     case '/api/agents':
       return json({ data: [], hasMore: false, after: null });
     case '/api/agents/default':
