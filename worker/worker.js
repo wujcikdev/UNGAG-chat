@@ -106,6 +106,7 @@ const ICON_HEADERS = { 'Content-Type': 'image/png', 'Cache-Control': 'public, ma
 const FAVICON_PATHS = new Set([
   '/ungag-icon.png',
   '/favicon.ico',
+  '/favicon-ungag-v2.png',
   '/apple-touch-icon.png',
   '/web-app-manifest-192x192.png',
   '/web-app-manifest-512x512.png',
@@ -362,6 +363,10 @@ export default {
       return json({ message: 'demo', status: 'ok' });
     }
     if (FAVICON_PATHS.has(pathname)) {
+      if (pathname === '/favicon.ico' || pathname === '/favicon-ungag-v2.png') {
+        const faviconUrl = new URL('/assets/favicon-32x32.png?v=3', request.url);
+        return env.ASSETS.fetch(new Request(faviconUrl, request));
+      }
       return new Response(UNGAG_ICON_BYTES, { headers: ICON_HEADERS });
     }
     if (pathname.startsWith('/api/')) {
