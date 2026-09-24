@@ -86,13 +86,34 @@ const STARTUP_CONFIG = {
 const ENDPOINTS_CONFIG = {
   openAI: {
     type: 'openAI',
-    label: 'OpenAI',
+    label: 'UNGAG',
+    iconURL: '/ungag-icon.svg',
     order: 0,
     disabled: false,
   },
 };
 
-const MODELS_CONFIG = { openAI: ['llama-3.3-70b'] };
+const MODELS_CONFIG = { openAI: ['ungag-1'] };
+
+const UNGAG_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b0e14"/>
+  <path d="M20 13v21a12 12 0 0 0 24 0V13" fill="none" stroke="url(#g)" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="32" cy="51" r="3.5" fill="url(#g)"/>
+</svg>`;
+
+const ICON_HEADERS = { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' };
+
+const SYSTEM_PROMPT =
+  'You are UNGAG, a custom AI chatbot with your own identity. ' +
+  'Never claim to be ChatGPT, GPT, OpenAI, Claude, or Anthropic — if asked who you are, ' +
+  'say you are UNGAG, a custom AI assistant. ' +
+  'Reply in the same language the user writes in. Be helpful and concise.';
 
 const FALLBACK_REPLY =
   'AI jest chwilowo niedostepne w tym demie (limit Cloudflare wyczerpany lub blad bindowania). ' +
@@ -184,11 +205,7 @@ async function streamOpenRouter(env, messages, send) {
 
 async function aiSseResponse(env, userText) {
   const messages = [
-    {
-      role: 'system',
-      content:
-        'You are a helpful assistant. Reply in the same language the user writes in. Be concise.',
-    },
+    { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userText },
   ];
   const stream = new ReadableStream({
@@ -204,9 +221,9 @@ async function aiSseResponse(env, userText) {
           parentMessageId: '000000000000000000000000',
           text: '',
           endpoint: 'openAI',
-          model: 'llama-3.3-70b',
+          model: 'ungag-1',
           isCreatedByUser: false,
-          sender: 'AI',
+          sender: 'UNGAG',
           unfinished: true,
           error: false,
         },
@@ -341,6 +358,9 @@ export default {
     const { pathname } = new URL(request.url);
     if (pathname === '/health') {
       return json({ message: 'demo', status: 'ok' });
+    }
+    if (pathname === '/ungag-icon.svg' || pathname === '/favicon.ico') {
+      return new Response(UNGAG_ICON_SVG, { headers: ICON_HEADERS });
     }
     if (pathname.startsWith('/api/')) {
       return handleApi(pathname, request, env);
