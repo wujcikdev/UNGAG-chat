@@ -209,6 +209,8 @@ async function handleApi(pathname, request, env) {
       return json([]);
     case '/api/user/settings/skills/active':
       return json({});
+    case '/api/projects':
+      return json({ projects: [], nextCursor: null });
     case '/api/auth/refresh':
       return json({ token: DEMO_TOKEN, user: USER });
     case '/api/auth/login':
