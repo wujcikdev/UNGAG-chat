@@ -1,5 +1,11 @@
 See CLAUDE.md.
 
+## Pushing
+
+The user has standing approval to commit and push completed work to GitHub. When a task is done
+and verified, commit with a message matching the repo style (`emoji type: subject`) and push the
+current branch to `origin` without asking again. Do not push secrets, and do not force-push.
+
 ## Branching and pull requests
 
 Branch off `dev` and target `dev` with every pull request; `gh pr create` defaults to `main`, so
