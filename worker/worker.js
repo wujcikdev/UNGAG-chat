@@ -38,6 +38,7 @@ const USER = {
 
 const STARTUP_CONFIG = {
   appTitle: 'UNGAG Chat',
+  customFooter: 'UNGAG Chat',
   serverDomain: '',
   analyticsGloballyEnabled: false,
   socialLogins: [],
