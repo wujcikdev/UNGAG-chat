@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
+import { HatGlasses } from 'lucide-react';
 import { easings } from '@react-spring/web';
-import { HatGlasses, ShieldOff } from 'lucide-react';
 import { EModelEndpoint } from 'librechat-data-provider';
 import { BirthdayIcon, TooltipAnchor, SplitText } from '@librechat/client';
 import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
@@ -27,14 +27,14 @@ function getTextSizeClass(text: string | undefined | null) {
   }
 
   if (text.length < 56) {
-    return 'text-3xl sm:text-5xl lg:text-6xl';
-  }
-
-  if (text.length < 70) {
     return 'text-2xl sm:text-4xl';
   }
 
-  return 'text-xl sm:text-2xl';
+  if (text.length < 70) {
+    return 'text-xl sm:text-2xl';
+  }
+
+  return 'text-lg sm:text-base';
 }
 
 export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: boolean }) {
@@ -138,47 +138,30 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
     <div
       className={`flex h-full transform-gpu flex-col items-center justify-center pb-16 transition-all duration-200 ${centerFormOnLanding ? 'max-h-full sm:max-h-0' : 'max-h-full'} ${getDynamicMargin}`}
     >
-      <div className="mb-7 flex items-center justify-center gap-2.5 sm:mb-9">
-        <span className="bg-border-medium hidden h-px w-8 sm:block" aria-hidden="true" />
-        <div className="border-accent-primary/30 bg-accent-primary/10 text-accent-primary inline-flex items-center gap-2 rounded-full border px-3.5 py-2">
-          <ShieldOff className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="font-mono text-xs font-semibold tracking-widest uppercase">
-            {localize('com_ui_uncensored_ai')}
-          </span>
-          <span className="text-text-muted font-mono text-xs tracking-wide uppercase">
-            {startupConfig?.appTitle ?? 'UNGAG Chat'}
-          </span>
-        </div>
-        <span className="bg-border-medium hidden h-px w-8 sm:block" aria-hidden="true" />
-      </div>
       <div ref={contentRef} className="flex flex-col items-center gap-0 p-2">
         <div
-          className={`flex ${textHasMultipleLines ? 'flex-col' : 'flex-col md:flex-row'} items-center justify-center gap-4 md:gap-5`}
+          className={`flex ${textHasMultipleLines ? 'flex-col' : 'flex-col md:flex-row'} items-center justify-center gap-2`}
         >
-          <div
-            className={`relative size-12 justify-center sm:size-14 ${textHasMultipleLines ? 'mb-2' : ''}`}
-          >
-            <div className="border-border-medium bg-surface-secondary flex h-full w-full items-center justify-center rounded-2xl border">
-              {isTemporary ? (
-                <div className={containerClassName}>
-                  <HatGlasses className="text-text-primary h-2/3 w-2/3" aria-hidden="true" />
-                </div>
-              ) : (
-                <ConvoIcon
-                  agentsMap={agentsMap}
-                  assistantMap={assistantMap}
-                  conversation={conversation}
-                  endpointsConfig={endpointsConfig}
-                  containerClassName={containerClassName}
-                  context="landing"
-                  className="text-text-primary h-2/3 w-2/3"
-                  size={41}
-                />
-              )}
-            </div>
+          <div className={`relative size-10 justify-center ${textHasMultipleLines ? 'mb-2' : ''}`}>
+            {isTemporary ? (
+              <div className={containerClassName}>
+                <HatGlasses className="h-2/3 w-2/3 text-text-primary" aria-hidden="true" />
+              </div>
+            ) : (
+              <ConvoIcon
+                agentsMap={agentsMap}
+                assistantMap={assistantMap}
+                conversation={conversation}
+                endpointsConfig={endpointsConfig}
+                containerClassName={containerClassName}
+                context="landing"
+                className="h-2/3 w-2/3 text-text-primary"
+                size={41}
+              />
+            )}
             {startupConfig?.showBirthdayIcon && (
               <TooltipAnchor
-                className="absolute right-2 bottom-[27px]"
+                className="absolute bottom-[27px] right-2"
                 description={localize('com_ui_happy_birthday')}
                 aria-label={localize('com_ui_happy_birthday')}
               >
@@ -191,7 +174,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
               <SplitText
                 key={`split-text-${name}`}
                 text={name}
-                className={`${getTextSizeClass(name)} text-text-primary font-medium`}
+                className={`${getTextSizeClass(name)} font-medium text-text-primary`}
                 delay={50}
                 textAlign="center"
                 animationFrom={greetingAnimationFrom}
@@ -206,7 +189,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
             <SplitText
               key={`split-text-${greetingText}${user?.name ? '-user' : ''}`}
               text={greetingText}
-              className={`${getTextSizeClass(greetingText)} text-text-primary font-medium`}
+              className={`${getTextSizeClass(greetingText)} font-medium text-text-primary`}
               delay={50}
               textAlign="center"
               animationFrom={greetingAnimationFrom}
@@ -223,7 +206,7 @@ export default function Landing({ centerFormOnLanding }: { centerFormOnLanding: 
           description={description}
           className={
             descriptionIsHTML
-              ? 'animate-fadeIn text-text-primary mt-4 flex max-w-md items-center justify-center gap-2 text-center text-sm font-normal [&_img]:inline-block [&_img]:h-4 [&_img]:w-4'
+              ? 'animate-fadeIn mt-4 flex max-w-md items-center justify-center gap-2 text-center text-sm font-normal text-text-primary [&_img]:inline-block [&_img]:h-4 [&_img]:w-4'
               : `animate-fadeIn mt-4 max-w-md text-center text-sm font-normal ${isTemporary ? 'text-text-secondary' : 'text-text-primary'}`
           }
         />
