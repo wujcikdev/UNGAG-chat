@@ -313,6 +313,8 @@ async function handleApi(pathname, request, env) {
       return json([]);
     case '/api/agents':
       return json({ data: [], hasMore: false, after: null });
+    case '/api/agents/categories':
+      return json([]);
     case '/api/agents/default':
       return json({ id: 'demo-agent', name: 'Demo agent', agent: null });
     case '/api/keys':
